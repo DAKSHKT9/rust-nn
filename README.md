@@ -22,7 +22,9 @@ The main logic is located in the `main.rs` file, which contains the neural netwo
 
 ### Files
 
-- `src/main.rs`: Contains the neural network class, training logic, and XOR gate example.
+- `src/lib/matrix.rs`: Contains Matrix class and code for all matrix operations
+- `src/lib/networks.rs`: Contains Network class and code for backward and forward propogation.
+- `src/main.rs`: Implementation of XOR gate example.
   
 ## Running the Project
 
