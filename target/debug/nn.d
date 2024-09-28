@@ -1,0 +1,1 @@
+/Users/dakshkatkar/Documents/Projects/rust/nn/target/debug/nn: /Users/dakshkatkar/Documents/Projects/rust/nn/src/lib/activations.rs /Users/dakshkatkar/Documents/Projects/rust/nn/src/lib/matrix.rs /Users/dakshkatkar/Documents/Projects/rust/nn/src/lib/mod.rs /Users/dakshkatkar/Documents/Projects/rust/nn/src/lib/networks.rs /Users/dakshkatkar/Documents/Projects/rust/nn/src/main.rs

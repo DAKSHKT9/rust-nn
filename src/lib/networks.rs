@@ -52,7 +52,7 @@ impl Network<'_>{
     }
 
     pub fn back_propogate(&mut self, outputs: Vec<f64>, targets : Vec<f64>) {
-        if targets.len() != self.layers[self.layers.len()]{
+        if targets.len() != self.layers[self.layers.len()-1]{
             panic!("Invalid number of targets");
         }
 
