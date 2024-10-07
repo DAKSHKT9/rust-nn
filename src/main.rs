@@ -11,7 +11,7 @@ fn main() {
 	];
 	let targets = vec![vec![0.0], vec![1.0], vec![1.0], vec![0.0]];
 
-	let mut network = Network::new(vec![2, 3, 1], 0.05, SIGMOID);
+	let mut network = Network::new(vec![2, 3, 1], 1, SIGMOID);
 
 	network.train(inputs, targets, 10000);
 
