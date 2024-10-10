@@ -3,5 +3,11 @@ name = "nn"
 version = "0.1.0"
 edition = "2021"
 
+
+[lib]
+name = "nn"
+path = "src/lib.rs"
+
+
 [dependencies]
 rand = "0.5"
