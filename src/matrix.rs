@@ -1,5 +1,7 @@
 use rand::{thread_rng, Rng};
-use std::{arch::aarch64::*};
+use std::arch::aarch64::*;
+use std::mem;
+use std::ptr;
 
 #[derive(Clone)]
 pub struct Matrix {
@@ -85,6 +87,8 @@ impl Matrix {
                         let a = vld1q_f64(&self.data[idx_a] as *const f64);
                         let b = vld1q_f64(&other_transposed.data[idx_b] as *const f64);
 
+                        println!("a values: {:?}", a);
+
                         let product = vmulq_f64(a, b);
                         sum = vaddq_f64(sum, product);
                         k += 4;
@@ -93,7 +97,8 @@ impl Matrix {
                     let mut final_sum = vaddvq_f64(sum);
 
                     while k < self.cols {
-                        final_sum += self.data[self.index(i, k)] * other_transposed.data[other_transposed.index(j, k)];
+                        final_sum += self.data[self.index(i, k)]
+                            * other_transposed.data[other_transposed.index(j, k)];
                         k += 1;
                     }
 
@@ -117,25 +122,28 @@ impl Matrix {
             for i in 0..self.rows {
                 let mut j = 0;
 
-                // SIMD: Process 4 elements at a time
-                while j + 4 <= self.cols {
+                // SIMD: Process 2 elements at a time
+                while j + 2 <= self.cols {
                     let idx_a = self.index(i, j);
                     let idx_b = other.index(i, j);
+
+                    // Load 2 elements from self and other into SIMD vectors
                     let a = vld1q_f64(&self.data[idx_a] as *const f64);
                     let b = vld1q_f64(&other.data[idx_b] as *const f64);
 
+                    // Add the two vectors
                     let sum = vaddq_f64(a, b);
 
-                    let res_idx = res.index(i, j);
-                    vst1q_f64(&mut res.data[res_idx] as *mut f64, sum);
+                    // Store result back into the result matrix
+                    vst1q_f64(&mut res.data[idx_a] as *mut f64, sum);
 
-                    j += 4;
+                    j += 2; // Move to the next 2 elements
                 }
 
-                // Handle remaining elements (non-multiples of 4)
+                // Handle remaining elements (if the number of columns is odd)
                 while j < self.cols {
-                    let res_idx = res.index(i, j); // Store the result of res.index(i, j)
-                    res.data[res_idx] = self.data[self.index(i, j)] + other.data[other.index(i, j)];
+                    res.data[self.index(i, j)] =
+                        self.data[self.index(i, j)] + other.data[other.index(i, j)];
                     j += 1;
                 }
             }
@@ -143,9 +151,6 @@ impl Matrix {
 
         res
     }
-
-
-
 
     pub fn dot_multiply(&self, other: &Matrix) -> Matrix {
         let mut res = Matrix::zeros(self.rows, self.cols);
@@ -180,43 +185,45 @@ impl Matrix {
     }
 
     pub fn subtract(&self, other: &Matrix) -> Matrix {
-    if self.cols != other.cols || self.rows != other.rows {
-        panic!("Attempted to subtract matrices with incorrect dimensions");
-    }
+        if self.cols != other.cols || self.rows != other.rows {
+            panic!("Attempted to subtract matrices with incorrect dimensions");
+        }
 
-    let mut res = Matrix::zeros(self.rows, self.cols);
+        let mut res = Matrix::zeros(self.rows, self.cols);
 
-    unsafe {
-        for i in 0..self.rows {
-            let mut j = 0;
+        unsafe {
+            for i in 0..self.rows {
+                let mut j = 0;
 
-            // SIMD: Process 4 elements at a time
-            while j + 4 <= self.cols {
-                let idx_a = self.index(i, j);
-                let idx_b = other.index(i, j);
-                let a = vld1q_f64(&self.data[idx_a] as *const f64);
-                let b = vld1q_f64(&other.data[idx_b] as *const f64);
+                // SIMD: Process 2 elements at a time
+                while j + 2 <= self.cols {
+                    let idx_a = self.index(i, j);
+                    let idx_b = other.index(i, j);
 
-                let difference = vsubq_f64(a, b);
+                    // Load 2 elements from self and other into SIMD vectors
+                    let a = vld1q_f64(&self.data[idx_a] as *const f64);
+                    let b = vld1q_f64(&other.data[idx_b] as *const f64);
 
-                let res_idx = res.index(i, j);
-                vst1q_f64(&mut res.data[res_idx] as *mut f64, difference);
+                    // Subtract the two vectors
+                    let diff = vsubq_f64(a, b);
 
-                j += 4;
-            }
+                    // Store result back into the result matrix
+                    vst1q_f64(&mut res.data[idx_a] as *mut f64, diff);
 
-            // Handle remaining elements (non-multiples of 4)
-            while j < self.cols {
-                let res_idx = res.index(i, j); // Store the result of res.index(i, j)
-                res.data[res_idx] = self.data[self.index(i, j)] - other.data[other.index(i, j)];
-                j += 1;
+                    j += 2; // Move to the next 2 elements
+                }
+
+                // Handle remaining elements (if the number of columns is odd)
+                while j < self.cols {
+                    res.data[self.index(i, j)] =
+                        self.data[self.index(i, j)] - other.data[other.index(i, j)];
+                    j += 1;
+                }
             }
         }
+
+        res
     }
-
-    res
-}
-
 
     pub fn map(&self, function: &dyn Fn(f64) -> f64) -> Matrix {
         let mapped_data: Vec<f64> = self.data.iter().map(|&value| function(value)).collect();
@@ -240,6 +247,17 @@ impl Matrix {
 
         res
     }
+
+    pub fn check_alignment(&self) -> bool {
+        // Get the pointer to the start of the Vec<f64>
+        let data_ptr = self.data.as_ptr();
+
+        // Convert the pointer to an address
+        let address = data_ptr as usize;
+
+        // Check if the address is aligned to a 16-byte boundary
+        address % 16 == 0
+    }
 }
 
 #[cfg(test)]
@@ -248,99 +266,67 @@ mod tests {
 
     #[test]
     fn test_add() {
-        let a = Matrix::from(vec![
-            vec![1.0, 2.0, 3.0, 4.0],
-            vec![5.0, 6.0, 7.0, 8.0],
-        ]);
-        let b = Matrix::from(vec![
-            vec![2.0, 4.0, 6.0, 8.0],
-            vec![1.0, 3.0, 5.0, 7.0],
-        ]);
+        let a = Matrix::from(vec![vec![1.0, 2.0, 3.0, 4.0], vec![5.0, 6.0, 7.0, 8.0]]);
+        let b = Matrix::from(vec![vec![2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0]]);
 
         let result = a.add(&b);
-        let expected = Matrix::from(vec![
-            vec![3.0, 6.0, 9.0, 12.0],
-            vec![6.0, 9.0, 12.0, 15.0],
-        ]);
+        let expected = Matrix::from(vec![vec![3.0, 6.0, 9.0, 12.0], vec![6.0, 9.0, 12.0, 15.0]]);
 
         assert_eq!(result.data, expected.data);
     }
 
     #[test]
     fn test_subtract() {
-        let a = Matrix::from(vec![
-            vec![5.0, 6.0, 7.0, 8.0],
-            vec![10.0, 11.0, 12.0, 13.0],
-        ]);
-        let b = Matrix::from(vec![
-            vec![1.0, 2.0, 3.0, 4.0],
-            vec![5.0, 6.0, 7.0, 8.0],
-        ]);
+        let a = Matrix::from(vec![vec![5.0, 6.0, 7.0, 8.0], vec![10.0, 11.0, 12.0, 13.0]]);
+        let b = Matrix::from(vec![vec![1.0, 2.0, 3.0, 4.0], vec![5.0, 6.0, 7.0, 8.0]]);
 
         let result = a.subtract(&b);
-        let expected = Matrix::from(vec![
-            vec![4.0, 4.0, 4.0, 4.0],
-            vec![5.0, 5.0, 5.0, 5.0],
-        ]);
+        let expected = Matrix::from(vec![vec![4.0, 4.0, 4.0, 4.0], vec![5.0, 5.0, 5.0, 5.0]]);
 
         assert_eq!(result.data, expected.data);
     }
 
     #[test]
     fn test_multiply() {
-        let a = Matrix::from(vec![
-            vec![1.0, 2.0, 3.0],
-            vec![4.0, 5.0, 6.0],
-        ]);
-        let b = Matrix::from(vec![
-            vec![7.0, 8.0],
-            vec![9.0, 10.0],
-            vec![11.0, 12.0],
-        ]);
+        let a = Matrix::from(vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]]);
+        let b = Matrix::from(vec![vec![7.0, 8.0], vec![9.0, 10.0], vec![11.0, 12.0]]);
 
         let result = a.multiply(&b);
-        let expected = Matrix::from(vec![
-            vec![58.0, 64.0],
-            vec![139.0, 154.0],
-        ]);
+        let expected = Matrix::from(vec![vec![58.0, 64.0], vec![139.0, 154.0]]);
 
         assert_eq!(result.data, expected.data);
     }
 
     #[test]
     fn test_dot_multiply() {
-        let a = Matrix::from(vec![
-            vec![1.0, 2.0, 3.0],
-            vec![4.0, 5.0, 6.0],
-        ]);
-        let b = Matrix::from(vec![
-            vec![7.0, 8.0, 9.0],
-            vec![10.0, 11.0, 12.0],
-        ]);
+        let a = Matrix::from(vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]]);
+        let b = Matrix::from(vec![vec![7.0, 8.0, 9.0], vec![10.0, 11.0, 12.0]]);
 
         let result = a.dot_multiply(&b);
-        let expected = Matrix::from(vec![
-            vec![7.0, 16.0, 27.0],
-            vec![40.0, 55.0, 72.0],
-        ]);
+        let expected = Matrix::from(vec![vec![7.0, 16.0, 27.0], vec![40.0, 55.0, 72.0]]);
 
         assert_eq!(result.data, expected.data);
     }
 
     #[test]
     fn test_transpose() {
-        let a = Matrix::from(vec![
-            vec![1.0, 2.0, 3.0],
-            vec![4.0, 5.0, 6.0],
-        ]);
+        let a = Matrix::from(vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]]);
 
         let result = a.transpose();
-        let expected = Matrix::from(vec![
-            vec![1.0, 4.0],
-            vec![2.0, 5.0],
-            vec![3.0, 6.0],
-        ]);
+        let expected = Matrix::from(vec![vec![1.0, 4.0], vec![2.0, 5.0], vec![3.0, 6.0]]);
 
         assert_eq!(result.data, expected.data);
+    }
+
+    #[test]
+    fn test_alignment() {
+        // Create a matrix using the `from()` function
+        let matrix = Matrix::from(vec![vec![1.0, 2.0, 3.0, 4.0], vec![5.0, 6.0, 7.0, 8.0]]);
+
+        // Assert that the memory alignment is correct (aligned to a 16-byte boundary)
+        assert!(
+            matrix.check_alignment(),
+            "Matrix data is not 16-byte aligned"
+        );
     }
 }
